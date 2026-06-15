@@ -1,7 +1,7 @@
-"""
+﻿"""
 data_split.py  —  Patient-Based Stratified Split + Label Budget Subsampling
 
-Key design decisions (matching project proposal):
+Key design decisions:
   - Patient-based split prevents data leakage (same patient never straddles sets)
   - Stratified by super_class at every level to preserve class distribution
   - Four label budget levels: 10%, 25%, 50%, 100% (proposal §Objectives)
@@ -16,9 +16,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
 
-# =====================================================================
-# 1. NPZ TARAMA VE META-VERİ OLUŞTURMA
-# =====================================================================
+
+
+
 def build_metadata_from_npz(processed_dir, original_csv_path):
     """
     Tüm EKG sinyallerini RAM'e yüklemek yerine sadece dosya yollarını ve
@@ -62,9 +62,9 @@ def build_metadata_from_npz(processed_dir, original_csv_path):
     return metadata_df
 
 
-# =====================================================================
-# 2. HASTA BAZLI TABAKALI BÖLME
-# =====================================================================
+
+
+
 def patient_based_stratified_split(df):
     """
     Veri Sızıntısını (Data Leakage) önleyen hasta bazlı bölme.
@@ -74,13 +74,13 @@ def patient_based_stratified_split(df):
 
     patient_df = df.drop_duplicates(subset=['patient_id']).copy()
 
-    # Test %20
+
     train_val_patients, test_patients = train_test_split(
         patient_df, test_size=0.20, random_state=42,
         stratify=patient_df['super_class']
     )
 
-    # Val %10 of total  →  %12.5 of train+val remainder
+
     train_patients, val_patients = train_test_split(
         train_val_patients, test_size=0.125, random_state=42,
         stratify=train_val_patients['super_class']
@@ -97,9 +97,9 @@ def patient_based_stratified_split(df):
     return train_df, val_df, test_df
 
 
-# =====================================================================
-# 3. LABEL BUDGET SUBSAMPLE FONKSİYONU
-# =====================================================================
+
+
+
 def create_label_budget_splits(train_df, budgets=(0.10, 0.25, 0.50), random_state=42):
     """
     Tüm eğitim setinden belirtilen oranlarda tabakalı alt küme üretir.
@@ -131,9 +131,9 @@ def create_label_budget_splits(train_df, budgets=(0.10, 0.25, 0.50), random_stat
     return budget_splits
 
 
-# =====================================================================
-# 4. PYTORCH DATASET SINIFI
-# =====================================================================
+
+
+
 class Processed_ECG_Dataset(Dataset):
     """
     'Lazy Loading' mantığıyla çalışır: ihtiyaç duyulan batch kadar
@@ -152,9 +152,9 @@ class Processed_ECG_Dataset(Dataset):
         label_text = row['super_class']
 
         with np.load(file_path, allow_pickle=True) as data:
-            signal = data['signal']           # (5000, 12)
+            signal = data['signal']
 
-        signal    = np.transpose(signal, (1, 0))  # → (12, 5000)
+        signal    = np.transpose(signal, (1, 0))
         label_idx = self.label_map.get(label_text, -1)
 
         return (
@@ -163,11 +163,11 @@ class Processed_ECG_Dataset(Dataset):
         )
 
 
-# =====================================================================
-# 5. SINIF DAĞILIM ÖZET TABLOSU
-# =====================================================================
+
+
+
 def print_class_distribution(df, split_name):
-    """Her split için sınıf dağılımını yazdırır (kalibre kontrol)."""
+    """Her split için sınıf dağılımını yazdırır."""
     counts = df['super_class'].value_counts()
     total  = len(df)
     print(f"\n  {split_name} sınıf dağılımı:")
@@ -175,36 +175,36 @@ def print_class_distribution(df, split_name):
         print(f"    {cls:5s}: {cnt:5d}  ({cnt/total*100:.1f}%)")
 
 
-# =====================================================================
-# ÇALIŞTIRMA BÖLÜMÜ
-# =====================================================================
+
+
+
 if __name__ == "__main__":
-    # Dizinleri kendi bilgisayarına göre ayarla
+
     PROCESSED_DIR = r"C:\Users\sgtun\OneDrive\Desktop\BYM-DONEM 2\AIE683\Paper Writing\DATASET\Datasets_Processed\PTB-XL"
     ORIGINAL_CSV  = r"C:\Users\sgtun\OneDrive\Desktop\BYM-DONEM 2\AIE683\Paper Writing\DATASET\PTB-XL\ptb-xl-a-large-publicly-available-electrocardiography-dataset-1.0.1\ptbxl_database.csv"
     SAVE_DIR      = r"C:\Users\sgtun\OneDrive\Desktop\BYM-DONEM 2\AIE683\Paper Writing\DATASET_HANDLING"
 
-    # ------------------------------------------------------------------
-    # 1. Meta-veri oluştur
-    # ------------------------------------------------------------------
+
+
+
     meta_df = build_metadata_from_npz(PROCESSED_DIR, ORIGINAL_CSV)
 
-    # ------------------------------------------------------------------
-    # 2. Hasta bazlı ana bölme (Train 70% | Val 10% | Test 20%)
-    # ------------------------------------------------------------------
+
+
+
     train_df, val_df, test_df = patient_based_stratified_split(meta_df)
 
-    # ------------------------------------------------------------------
-    # 3. Label budget alt kümeleri  (10%, 25%, 50%)
-    # ------------------------------------------------------------------
+
+
+
     print("\nLabel budget alt kümeleri oluşturuluyor...")
     budget_splits = create_label_budget_splits(
         train_df, budgets=(0.10, 0.25, 0.50)
     )
 
-    # ------------------------------------------------------------------
-    # 4. Sınıf dağılımlarını doğrula
-    # ------------------------------------------------------------------
+
+
+
     print_class_distribution(train_df,              "Train 100%")
     print_class_distribution(budget_splits['50'],   "Train  50%")
     print_class_distribution(budget_splits['25'],   "Train  25%")
@@ -212,9 +212,9 @@ if __name__ == "__main__":
     print_class_distribution(val_df,                "Val        ")
     print_class_distribution(test_df,               "Test       ")
 
-    # ------------------------------------------------------------------
-    # 5. DataLoader sağlamlık testi (isteğe bağlı)
-    # ------------------------------------------------------------------
+
+
+
     print("\nDataLoader sanity check (10% budget)...")
     loader = DataLoader(Processed_ECG_Dataset(budget_splits['10']),
                         batch_size=32, shuffle=True)
@@ -222,18 +222,18 @@ if __name__ == "__main__":
     print(f"  Sinyal boyutu (beklenen [32, 12, 5000]): {signals.shape}")
     print(f"  Etiket boyutu (beklenen [32])          : {labels.shape}")
 
-    # ------------------------------------------------------------------
-    # 6. Tüm split'leri CSV olarak kaydet
-    # ------------------------------------------------------------------
+
+
+
     print("\nCSV dosyaları kaydediliyor...")
     os.makedirs(SAVE_DIR, exist_ok=True)
 
-    # Sabit bölmeler (her deneyde aynı hastalar)
+
     train_df.to_csv(os.path.join(SAVE_DIR, "train_split_100.csv"), index=False)
     val_df  .to_csv(os.path.join(SAVE_DIR, "val_split.csv"),       index=False)
     test_df .to_csv(os.path.join(SAVE_DIR, "test_split.csv"),      index=False)
 
-    # Label budget alt kümeleri (öneri: 4 farklı bütçe seviyesi)
+
     for pct, df_budget in budget_splits.items():
         out_path = os.path.join(SAVE_DIR, f"train_split_{pct}.csv")
         df_budget.to_csv(out_path, index=False)
